@@ -21,10 +21,41 @@ function normalizeCookie(c) {
     domain: c.domain,
     path: c.path,
     expirationDate: c.expirationDate,
+    expiresAtISO: c.expirationDate ? new Date(c.expirationDate * 1000).toISOString() : null,
     httpOnly: c.httpOnly,
     secure: c.secure,
     sameSite: c.sameSite,
     session: c.session
+  };
+}
+
+function getExpirySummary(cookies) {
+  const now = Date.now() / 1000;
+  const persistent = cookies.filter(c => typeof c.expirationDate === 'number');
+  const sessionOnly = cookies.filter(c => !c.expirationDate || c.session);
+
+  if (!persistent.length) {
+    return {
+      minHours: null,
+      maxHours: null,
+      soonest: null,
+      latest: null,
+      sessionCount: sessionOnly.length
+    };
+  }
+
+  const sorted = persistent.slice().sort((a, b) => a.expirationDate - b.expirationDate);
+  const soonest = sorted[0].expirationDate;
+  const latest = sorted[sorted.length - 1].expirationDate;
+  const minHours = Math.max(0, (soonest - now) / 3600);
+  const maxHours = Math.max(0, (latest - now) / 3600);
+
+  return {
+    minHours,
+    maxHours,
+    soonest,
+    latest,
+    sessionCount: sessionOnly.length
   };
 }
 
@@ -38,15 +69,26 @@ async function copyCookies() {
 
     const base = getBaseDomain(u.hostname);
     const cookies = await getCookiesForDomain(base);
+    const expiry = getExpirySummary(cookies);
     const payload = {
       site: u.hostname,
       baseDomain: base,
       exportedAt: new Date().toISOString(),
+      expirySummary: {
+        soonestExpiresAt: expiry.soonest ? new Date(expiry.soonest * 1000).toISOString() : null,
+        latestExpiresAt: expiry.latest ? new Date(expiry.latest * 1000).toISOString() : null,
+        minHoursToExpiry: expiry.minHours === null ? null : Number(expiry.minHours.toFixed(2)),
+        maxHoursToExpiry: expiry.maxHours === null ? null : Number(expiry.maxHours.toFixed(2)),
+        sessionCookieCount: expiry.sessionCount
+      },
       cookies: cookies.map(normalizeCookie)
     };
 
     await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    status.textContent = `已复制 ${cookies.length} 条 Cookies 到剪贴板`;
+    const warn = expiry.minHours !== null && expiry.minHours < 24
+      ? `\n⚠️ 最早过期约 ${expiry.minHours.toFixed(1)} 小时后。`
+      : '';
+    status.textContent = `已复制 ${cookies.length} 条 Cookies 到剪贴板${warn}\n提示：导出快照不会因本地“退出登录”自动失效。`;
   } catch (e) {
     status.textContent = `复制失败：${e.message || e}`;
   }
