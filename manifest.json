@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Cookie Helper (Local Use)",
+  "version": "0.1.0",
+  "description": "One-click copy cookies and one-click logout (clear cookies) for current site.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "cookies",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
